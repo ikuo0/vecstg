@@ -1,6 +1,9 @@
 {
   "name": "go-ebitengine",
-  "image": "mcr.microsoft.com/devcontainers/go:1.23",
+  "image": "mcr.microsoft.com/devcontainers/go:1.24",
+  "mounts": [
+    "source=/mnt/d/share,target=/share,type=bind,consistency=cached"
+  ],
   "customizations": {
     "vscode": {
       "extensions": [
