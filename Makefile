@@ -1,12 +1,15 @@
 APP := main
 MAIN := ./src
 
-.PHONY: all test build-win fmt vet
+.PHONY: all test test-headless build-win fmt vet
 
 all: fmt vet test build-win
 
 test:
 	go test ./src/...
+
+test-headless:
+	xvfb-run -a go test ./src/draw -run TestRunGameOffscreenAndWritePNG -v
 
 fmt:
 	gofmt -w ./src

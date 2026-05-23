@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>ASCII Glyph Editor</title>
+	<style>
+		:root {
+			--bg: #f5efe4;
+			--panel: #fffaf2;
+			--ink: #1d1a16;
+			--muted: #6f665b;
+			--grid: #b7aa96;
+			--accent: #b4472f;
+			--accent-soft: rgba(180, 71, 47, 0.16);
+			--shadow: 0 18px 48px rgba(41, 29, 18, 0.12);
+			--cell-size: 72px;
+			--rows: 8;
+			--cols: 4;
+		}
+
+		* {
+			box-sizing: border-box;
+		}
+
+		body {
+			margin: 0;
+			min-height: 100vh;
+			font-family: "Noto Sans JP", "Hiragino Sans", sans-serif;
+			color: var(--ink);
+			background:
+				radial-gradient(circle at top left, rgba(180, 71, 47, 0.16), transparent 28%),
+				linear-gradient(180deg, #f8f3eb 0%, var(--bg) 100%);
+		}
+
+		.page {
+			width: min(1200px, calc(100vw - 32px));
+			margin: 32px auto;
+			padding: 24px;
+			background: rgba(255, 250, 242, 0.88);
+			backdrop-filter: blur(8px);
+			border: 1px solid rgba(88, 61, 38, 0.12);
+			border-radius: 24px;
+			box-shadow: var(--shadow);
+		}
+
+		.header {
+			margin-bottom: 24px;
+		}
+
+		.header h1 {
+			margin: 0 0 8px;
+			font-size: clamp(28px, 4vw, 44px);
+			letter-spacing: 0.04em;
+		}
+
+		.header p {
+			margin: 0;
+			color: var(--muted);
+			line-height: 1.6;
+		}
+
+		.layout {
+			display: grid;
+			grid-template-columns: minmax(360px, 1fr) minmax(320px, 420px);
+			gap: 24px;
+			align-items: start;
+		}
+
+		.panel {
+			background: var(--panel);
+			border: 1px solid rgba(88, 61, 38, 0.12);
+			border-radius: 20px;
+			padding: 20px;
+			box-shadow: 0 10px 28px rgba(41, 29, 18, 0.08);
+		}
+
+		.panel h2 {
+			margin: 0 0 8px;
+			font-size: 20px;
+		}
+
+		.panel p {
+			margin: 0 0 16px;
+			color: var(--muted);
+			line-height: 1.6;
+		}
+
+		.grid-shell {
+			position: relative;
+			display: inline-block;
+			padding: 20px;
+			border-radius: 18px;
+			background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(245, 239, 228, 0.88));
+			border: 1px solid rgba(88, 61, 38, 0.1);
+		}
+
+		.grid {
+			position: relative;
+			display: grid;
+			grid-template-columns: repeat(var(--cols), var(--cell-size));
+			grid-template-rows: repeat(var(--rows), var(--cell-size));
+			width: calc(var(--cols) * var(--cell-size));
+			height: calc(var(--rows) * var(--cell-size));
+			background: rgba(255, 252, 247, 0.85);
+		}
+
+		.cell {
+			border-right: 1px solid var(--grid);
+			border-bottom: 1px solid var(--grid);
+		}
+
+		.cell:nth-child(4n + 1) {
+			border-left: 1px solid var(--grid);
+		}
+
+		.cell:nth-child(-n + 4) {
+			border-top: 1px solid var(--grid);
+		}
+
+		.point-layer {
+			position: absolute;
+			inset: 20px;
+			pointer-events: none;
+		}
+
+		.grid-point {
+			position: absolute;
+			width: 22px;
+			height: 22px;
+			margin-left: -11px;
+			margin-top: -11px;
+			border: 0;
+			border-radius: 999px;
+			background: var(--accent-soft);
+			box-shadow: 0 0 0 1px rgba(180, 71, 47, 0.3);
+			cursor: pointer;
+			pointer-events: auto;
+			transition: transform 120ms ease, background 120ms ease;
+		}
+
+		.grid-point:hover,
+		.grid-point:focus-visible {
+			transform: scale(1.12);
+			background: rgba(180, 71, 47, 0.28);
+			outline: none;
+		}
+
+		.grid-point::after {
+			content: "";
+			position: absolute;
+			inset: 7px;
+			border-radius: 999px;
+			background: var(--accent);
+		}
+
+		.point-labels {
+			margin-top: 12px;
+			font-size: 13px;
+			color: var(--muted);
+		}
+
+		.editor-output {
+			width: 100%;
+			min-height: 540px;
+			resize: vertical;
+			border: 1px solid rgba(88, 61, 38, 0.16);
+			border-radius: 14px;
+			padding: 16px;
+			font: 14px/1.6 "IBM Plex Mono", "Cascadia Code", monospace;
+			color: var(--ink);
+			background: #fffdfa;
+		}
+
+		.hint {
+			margin-top: 12px;
+			padding: 12px 14px;
+			border-radius: 12px;
+			background: rgba(180, 71, 47, 0.08);
+			color: #5f2619;
+			font-size: 14px;
+			line-height: 1.6;
+		}
+
+		@media (max-width: 920px) {
+			.layout {
+				grid-template-columns: 1fr;
+			}
+
+			.editor-output {
+				min-height: 260px;
+			}
+		}
+
+		@media (max-width: 620px) {
+			:root {
+				--cell-size: 56px;
+			}
+
+			.page {
+				width: min(100vw - 16px, 1200px);
+				margin: 8px auto;
+				padding: 16px;
+			}
+
+			.grid-shell {
+				padding: 14px;
+			}
+
+			.point-layer {
+				inset: 14px;
+			}
+		}
+	</style>
+</head>
+<body>
+	<main class="page">
+		<header class="header">
+			<h1>ASCII座標エディタ</h1>
+			<p>左側の4列×8行グリッドの交点をクリックしてイベントを発火できます。右側はASCII文字の線座標を表示するための領域です。</p>
+		</header>
+
+		<section class="layout">
+			<section class="panel">
+				<h2>グリッド</h2>
+				<p>各交点と四隅付近をクリックすると、対応するイベント関数が呼ばれます。関数本体は空のまま残しています。</p>
+
+            <!-- 新しい線 -->
+            <button id="new-line-button" type="button">新しい線を開始</button>
+            <!-- クリア -->
+            <button id="clear-button" type="button">全てクリア</button>
+
+				<div class="grid-shell">
+					<div id="ascii-grid" class="grid" aria-label="ASCII描画グリッド"></div>
+					<div id="point-layer" class="point-layer" aria-hidden="false"></div>
+				</div>
+
+				<div class="point-labels">交点数: 横5 × 縦9</div>
+			</section>
+
+			<section class="panel">
+				<h2>座標出力</h2>
+				<p>ASCII文字を線で構成した際の座標をここへ表示します。現時点では表示領域のみ用意しています。</p>
+
+				<textarea id="coordinate-output" class="editor-output" spellcheck="false" placeholder="例:
+glyph 'A'
+[{x:0,y:0},{x:2,y:4}] ..." style="tab-size: 4;"></textarea>
+
+				<div class="hint">クリック時は空の関数 `handleGridPointClick` と `handleCornerClick` が呼ばれます。後からここに実処理を実装できます。</div>
+			</section>
+		</section>
+	</main>
+
+	<script>
+        // グリッドの交差点やコーナーを表すクラス
+        function GridNodeClass(elementId, row, col) {
+            this.row = row;
+            this.col = col;
+            this.isCorner = false;
+            this.elementId = elementId;
+            this.prev = null;
+            this.next = null;
+            this.begin = true;// デフォルトは先頭であり終端
+            this.middle = false;
+            this.end = true; // デフォルトは先頭であり終端
+            this.clearFlags = function() {
+                this.begin = false;
+                this.middle = false;
+                this.end = false;
+            }
+            this.setNext = function(node) {
+                // 座標が同じだったらなにもしない
+                if(this.row === node.row && this.col === node.col) {
+                    console.warn("Invalid cell state: next cell cannot be the same as the current cell.");
+                    return;
+                }
+                // 次が設定できるのは終端のセルのみ
+                if(this.end === true) {
+                    this.next = node;
+                    node.prev = this;
+                    this.clearFlags();
+                    this.middle = true;
+                    node.clearFlags();
+                    node.end = true; // 次のセルは終端に設定
+                } else {
+                    console.error("Invalid cell state: next cell can only be set for cells marked as end.");
+                }
+            }
+            // this を先頭の要素として末尾まで row, col 座標の配列を取得する
+            this.toCoordinateArray = function() {
+                const coordinates = [];
+                for (let node = this; node !== null; node = node.next) {
+                    coordinates.push({ elementId: node.elementId, x: node.col, y: node.row });
+                }
+                return coordinates;
+            };
+        };
+        const nodeListData = new (function() {
+            var self = this;
+            self.nodeStarts = [];
+            self.clear = function() {
+                self.nodeStarts = [];
+            };
+            self.append = function(node) {
+                self.nodeStarts.push(node);
+            };
+            self.generateLinePointsList = function() {
+                return self.nodeStarts.map(node => node.toCoordinateArray());
+            };
+        })();
+		const rows = 8;
+		const cols = 4;
+
+		const grid = document.getElementById("ascii-grid");
+		const pointLayer = document.getElementById("point-layer");
+		const coordinateOutput = document.getElementById("coordinate-output");
+
+        var lastClickedNode = null;
+        var currentNode = null;
+
+		buildGrid();
+		buildGridPoints();
+        setupButtonEvents();
+		renderCoordinateText();
+
+		function buildGrid() {
+			const fragment = document.createDocumentFragment();
+
+			for (let row = 0; row < rows; row += 1) {
+				for (let col = 0; col < cols; col += 1) {
+					const cell = document.createElement("div");
+					cell.className = "cell";
+					cell.dataset.row = String(row);
+					cell.dataset.col = String(col);
+					fragment.appendChild(cell);
+				}
+			}
+
+			grid.appendChild(fragment);
+		}
+
+		function buildGridPoints() {
+			const fragment = document.createDocumentFragment();
+			const width = grid.clientWidth;
+			const height = grid.clientHeight;
+
+			for (let row = 0; row <= rows; row += 1) {
+				for (let col = 0; col <= cols; col += 1) {
+					const pointButton = document.createElement("button");
+                    const elementId = `point-${row}-${col}`;
+                    pointButton.id = elementId;
+					pointButton.type = "button";
+					pointButton.className = "grid-point";
+					pointButton.style.left = `${(width / cols) * col}px`;
+					pointButton.style.top = `${(height / rows) * row}px`;
+					pointButton.dataset.row = String(row);
+					pointButton.dataset.col = String(col);
+					pointButton.title = `row=${row}, col=${col}`;
+
+					const isCorner = (row === 0 || row === rows) && (col === 0 || col === cols);
+					pointButton.addEventListener("click", (event) => {
+						const payload = { elementId, row, col, isCorner };
+						if (isCorner) {
+							handleCornerClick(payload, event);
+							return;
+						}
+						handleGridPointClick(payload, event);
+					});
+
+					fragment.appendChild(pointButton);
+				}
+			}
+
+			pointLayer.appendChild(fragment);
+		}
+        
+        function setupButtonEvents() {
+            const newLineButton = document.getElementById("new-line-button");
+            const clearButton = document.getElementById("clear-button");
+
+            newLineButton.addEventListener("click", () => {
+                console.log("New line button clicked");
+                // 新しい線を開始するための処理をここに実装
+                lastClickedNode = null; // 新しい線を開始するので、最後にクリックしたノードをリセット
+                currentNode = null; // 現在のノードもリセット
+            });
+
+            clearButton.addEventListener("click", () => {
+                console.log("Clear button clicked");
+                // 全てクリアするための処理をここに実装
+                nodeListData.clear(); // ノードリストをクリア
+                lastClickedNode = null; // 新しい線を開始するので、最後にクリックしたノードをリセット
+                currentNode = null; // 現在のノードもリセット
+                renderCoordinateText(); // 座標テキストを更新
+				updateView();
+            });
+        }
+
+		function renderCoordinateText() {
+			coordinateOutput.value = "";
+		}
+
+        function handlePointClick(_payload, _event) {
+            if(currentNode === null) {
+                const { elementId, row, col } = _payload;
+                const newNode = new GridNodeClass(elementId, row, col);
+                newNode.begin = true; // 新しい線の開始点を設定
+                nodeListData.append(newNode); // ノードリストに追加
+                currentNode = newNode; // 現在のノードを更新
+                updateView();
+                return;
+            } else {// next の設定
+                const { elementId, row, col } = _payload;
+                const newNode = new GridNodeClass(elementId, row, col);
+                currentNode.setNext(newNode); // 現在のノードの次を設定
+                currentNode = newNode; // 現在のノードを更新
+                updateView();
+                return;
+            }
+        }
+
+		function handleGridPointClick(_payload, _event) {
+            console.log(_payload);
+            handlePointClick(_payload, _event);
+		}
+
+		function handleCornerClick(_payload, _event) {
+            console.log(_payload);
+            handlePointClick(_payload, _event);
+		}
+
+        function updateCanvas(){
+			// point-layer と同じ座標系でキャンバスを重ねる
+            var canvas = document.getElementById("ascii-canvas");
+			if(!canvas) {
+				canvas = document.createElement("canvas");
+				canvas.id = "ascii-canvas";
+				canvas.style.position = "absolute";
+				canvas.style.left = "0";
+				canvas.style.top = "0";
+				canvas.style.pointerEvents = "none";
+				pointLayer.appendChild(canvas);
+            }
+
+			const width = pointLayer.clientWidth;
+			const height = pointLayer.clientHeight;
+			const dpr = window.devicePixelRatio || 1;
+			canvas.style.width = `${width}px`;
+			canvas.style.height = `${height}px`;
+			canvas.width = Math.max(1, Math.round(width * dpr));
+			canvas.height = Math.max(1, Math.round(height * dpr));
+
+            var ctx = canvas.getContext("2d");
+			ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+			ctx.clearRect(0, 0, width, height);
+
+			const layerRect = pointLayer.getBoundingClientRect();
+			const strokeWidth = 4;
+
+			function snapStrokeCoord(value, lineWidth) {
+				// 線幅が偶数なら整数、奇数なら .5 に揃えると見た目の太さが安定しやすい。
+				if (lineWidth % 2 === 0) {
+					return Math.round(value);
+				}
+				return Math.round(value) + 0.5;
+			}
+
+            var linePointsList = nodeListData.generateLinePointsList();
+            for(var i = 0; i < linePointsList.length; i++) {
+                var linePoints = linePointsList[i];
+                console.log(`Line ${i}:`, linePoints);
+				if(linePoints.length === 0) {
+					continue;
+				}
+
+				ctx.beginPath();
+                for(var j = 0; j < linePoints.length; j++) {
+                    var point = linePoints[j];
+                    var elm = document.getElementById(point.elementId);
+                    if(elm) {
+                        var rect = elm.getBoundingClientRect();
+						var x = rect.left + rect.width / 2 - layerRect.left;
+						var y = rect.top + rect.height / 2 - layerRect.top;
+						x = snapStrokeCoord(x, strokeWidth);
+						y = snapStrokeCoord(y, strokeWidth);
+                        console.log(`    Calculated coordinates: x=${x}, y=${y}`);
+                        if(j == 0) {// MoveTo
+                            ctx.moveTo(x, y);
+                        } else {// LineTo
+                            ctx.lineTo(x, y);
+                        }
+                    } else {
+                        console.warn(`    Element with id ${point.elementId} not found.`); 
+                    }
+                }
+				ctx.strokeStyle = "#b4472f";
+				ctx.lineWidth = strokeWidth;
+				ctx.lineCap = "round";
+				ctx.lineJoin = "round";
+				ctx.stroke();
+            }
+        }
+        function updateText() {
+            // 縦幅 1.0
+            // 横幅 0.5
+            // と設定し、次のようなテキストを作成するイメージ
+            /*
+	undisplayablePoints := Glyph{
+		Polylines: []Polyline{
+			{
+				Points: []Point{
+					{X: 0, Y: 0},
+					{X: 0.5, Y: 1.0},
+				},
+			},
+			{
+				Points: []Point{
+					{X: 0.5, Y: 0},
+					{X: 0.0, Y: 1.0},
+				},
+			},
+		},
+	}
+            */
+            const linePointsList = nodeListData.generateLinePointsList();
+            var glyphData = [];
+            for(var i = 0; i < linePointsList.length; i++) {
+                var linePoints = linePointsList[i];
+                var polyLineData = [];
+                for(var j = 0; j < linePoints.length; j++) {
+                    var point = linePoints[j];
+                    // col は cols の倍で正規化
+                    // row は rows で正規化
+                    polyLineData.push({
+                        x: parseFloat(point.x) / (parseFloat(cols) * 2),
+                        y: parseFloat(point.y) / parseFloat(rows),
+                    });
+                }
+                glyphData.push(polyLineData);
+            }
+            var outputText = "points = Glyph{\n\tPolylines: []Polyline{\n";
+            for(var i = 0; i < glyphData.length; i++) {
+                var polyLineData = glyphData[i];
+                // outputText += `Polyline ${i}:\n`;
+                outputText += "\t\t{\n\t\t\tPoints: []Point{\n";
+                for(var j = 0; j < polyLineData.length; j++) {
+                    var point = polyLineData[j];
+                    outputText += `\t\t\t\t{X: ${point.x.toFixed(3)}, Y: ${point.y.toFixed(3)}},\n`;
+                }
+                outputText += "\t\t\t},\n";
+                outputText += "\t\t},\n";
+            }
+            outputText += "\t},\n";
+            outputText += "}\n";
+            coordinateOutput.value = outputText;
+        }
+        function updateView() {
+            updateCanvas();
+            updateText();
+        }
+	</script>
+</body>
+</html>
