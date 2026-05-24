@@ -11,3 +11,8 @@ func main() {
 	log.Printf("listening on http://localhost%s/ascii_edit.html", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }
+
+/*
+cd tools/ascii_edit
+go run httpd.go
+*/

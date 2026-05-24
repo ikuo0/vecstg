@@ -146,6 +146,14 @@ func ScalePoints(center Point, points []Point, scaleX, scaleY float64) []Point {
 	return scaled
 }
 
+func ScaleGlyph(glyph Glyph, scaleX, scaleY float64) Glyph {
+	scaledPolylines := make([]Polyline, len(glyph.Polylines))
+	for i, polyline := range glyph.Polylines {
+		scaledPolylines[i] = Polyline{Points: ScalePoints(Point{X: 0, Y: 0}, polyline.Points, scaleX, scaleY)}
+	}
+	return Glyph{Polylines: scaledPolylines}
+}
+
 func GetFitScale(glyph Glyph, targetWidth, targetHeight float64) (scale float64) {
 	box := BoundingBox(glyph)
 	width := box.Width()

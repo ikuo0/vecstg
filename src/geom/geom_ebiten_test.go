@@ -22,15 +22,15 @@ const ScreenWidth = 640
 const ScreenHeight = 480
 
 type polylineCaptureGame struct {
-	glyph    Glyph
+	glyphs   []Glyph
 	fileName string
 	err      error
 	done     bool
 }
 
-func Execute(t *testing.T, glyph Glyph, fileName string) {
+func Execute(t *testing.T, glyphs []Glyph, fileName string) {
 	g := &polylineCaptureGame{
-		glyph:    glyph,
+		glyphs:   glyphs,
 		fileName: fileName,
 	}
 
@@ -46,14 +46,14 @@ func Execute(t *testing.T, glyph Glyph, fileName string) {
 func TestDrawPolyline(t *testing.T) {
 	Execute(
 		t,
-		Glyph{Polylines: []Polyline{
+		[]Glyph{{Polylines: []Polyline{
 			{Points: []Point{
 				{X: 200, Y: 100},
 				{X: 100, Y: 200},
 				{X: 300, Y: 200},
 				{X: 200, Y: 100},
 			}},
-		}},
+		}}},
 		fmt.Sprintf("%s.png", t.Name()),
 	)
 }
@@ -92,7 +92,40 @@ func TestDrawNumber2(t *testing.T) {
 
 	Execute(
 		t,
-		glyph,
+		[]Glyph{glyph},
+		fmt.Sprintf("%s.png", t.Name()),
+	)
+}
+
+// xvfb-run -a go test ./src/geom -run TestDrawAScii -v
+// ASCII 0x00~0xFF を全て描画するテスト
+func TestDrawAScii(t *testing.T) {
+	// ASCII 0x00~0xFF を全て描画
+	// ascii_glyphs.go の Glyphs を使用
+	// 16個で改行
+	initAsciiCharacters()
+	const cols = 16
+	cellWidth := ScreenWidth / float64(cols)
+	cellHeight := ScreenHeight / float64(cols)
+	var allGlyphs []Glyph
+	for i, g := range asciiPolylines {
+		if g.Polylines == nil {
+			continue
+		}
+		// 0x00 のX（バッテンマーク）を基準にして、セルの中央に収まるようにスケーリングとトランスレーションを行う
+		scaleBase := asciiPolylines[0]
+		scale := GetFitScaleWithMargin(scaleBase, cellWidth, cellHeight, cellHeight*0.2) // 20%のマージンを追加
+		scaled := ScaleGlyph(g, scale, scale)
+		scaledBox := BoundingBox(scaled)
+		xOffset := float64(i%cols)*cellWidth + (cellWidth-scaledBox.Width())/2 - scaledBox.Left
+		yOffset := float64(i/cols)*cellHeight + (cellHeight-scaledBox.Height())/2 - scaledBox.Top
+		translated := TranslateGlyph(scaled, xOffset, yOffset)
+		allGlyphs = append(allGlyphs, translated)
+	}
+
+	Execute(
+		t,
+		allGlyphs,
 		fmt.Sprintf("%s.png", t.Name()),
 	)
 }
@@ -106,8 +139,10 @@ func (g *polylineCaptureGame) Update() error {
 	img.Fill(color.Black)
 
 	line := color.RGBA{R: 255, G: 0, B: 0, A: 255}
-	for _, polyline := range g.glyph.Polylines {
-		drawPolyline(img, polyline, line)
+	for _, glyph := range g.glyphs {
+		for _, polyline := range glyph.Polylines {
+			drawPolyline(img, polyline, line)
+		}
 	}
 
 	if err := saveImageAsPNG(img, g.fileName); err != nil {
